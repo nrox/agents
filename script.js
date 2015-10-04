@@ -1,186 +1,153 @@
 
-function GameBoard(){
-    this.canvasId = "canvas";
-    this.scoreId = "score";
+window.onload = function () {
+  var board = new Board();
+  var agent = new Agent();
+  board.clear();
+  board.draw(agent);
+  var learner = colorLearner();
+  agent.addLearner('color', learner, learner.stateUpdate);
+  learner = positionLearner();
+  agent.addLearner('position', learner, learner.stateUpdate);
+  learner = dimensionLearner();
+  agent.addLearner('dimension', learner, learner.stateUpdate);
+  setInterval(function(){
+    agent.updateState('color');
+    agent.updateState('position');
+    agent.updateState('dimension');
+    board.clear();
+    board.draw(agent);
+  }, 500);
+};
 
-    this.canvasWidth = 300;
-    this.canvasHeight = 300;
-    this.width = 10; //cells
-    this.height = 10; //cells
-    this.board = [];
-    this.empty = 0;
-    this.agent = 1;
-    this.foodPoisonRatio = 0.5;
-    this.density = 0.1;
-    this.food = 2;
-    this.poison = 3;
-
-    this.score = {};
-    this.score[this.food] = 1;
-    this.score[this.poison] = 1;
-    this.score[this.empty] = 1;
-
-    this.userAction = undefined;
-    this.exploration = 0.2;
-    this.canvasContext = undefined;
-
-    this.colorDictionary = {};
-    this.colorDictionary[this.food] = 'green';
-    this.colorDictionary[this.empty] = 'white';
-    this.colorDictionary[this.poison] = 'gray';
-    this.colorDictionary[this.agent] = 'black';
-
-    this.rewardDictionary = {};
-    this.rewardDictionary[this.food] = 1;
-    this.rewardDictionary[this.empty] = 0;
-    this.rewardDictionary[this.poison] = -1;
-    this.agentPosition = {
-        line: this.height-1,
-        column: ~~(this.width/2)
-    };
-    this.init();
+function colorLearner(){
+  var learner = new QLearner();
+  learner.add('blue', 'green', 1);
+  learner.add('green', 'red', 1);
+  learner.add('red', 'yellow', 1);
+  learner.add('yellow', 'black', 1);
+  learner.add('black', 'blue', 1);
+  var updater = function (state) {
+    this.color.fillStyle = state;
+    if (state == 'black') {
+      this.color.strokeStyle = 'red';
+    } else {
+      this.color.strokeStyle = 'black';
+    }
+  };
+  learner.stateUpdate = updater;
+  learner.learn(1000);
+  learner.setState('black');
+  return learner;
 }
 
-GameBoard.prototype.init = function(){
-    this.board = []; //the representation of the world
-    for (var column = 0; column < this.width; column++){
-        this.board.push([]);
-        for (var line = 0; line < this.height; line++){
-            this.board[column].push(this.empty);
-        }
-    }
-    var canvas = document.getElementById(this.canvasId);
-    this.canvasContext = canvas.getContext('2d');
-};
-
-GameBoard.prototype.setPosition = function(column){
-    //set agents position
-    column = (column + this.width) % this.width; //circular world
-    this.agentPosition.column = column;
-    this.board[column][this.agentPosition.line] = this.agent;
-};
-
-GameBoard.prototype.addMoreObjects = function(){
-    //insert more food and poison
-    for (var column = 0; column < this.width; column++){
-        if (Math.random()<this.density){
-            this.board[column][0] = Math.random() < this.foodPoisonRatio ? this.food : this.poison;
-        } else {
-            this.board[column][0] = this.empty;
-        }
-    }
-    this.setPosition(this.agentPosition.column);
-};
-
-GameBoard.prototype.moveObjectsDown = function(){
-    //advance objects position 1 cell down
-    for (var line = this.height - 1; line > 0; line--){
-        for (var column = 0; column < this.width; column++){
-            this.board[column][line] = this.board[column][line-1];
-        }
-    }
-};
-
-GameBoard.prototype.currentState = function(){
-    //get a string representation of the objects in the 3x3 square in front of the agent
-    var state = "S";
-    var line, column;
-    for (var dcol = -1; dcol <= 1 ; dcol++){
-        for (var dline = -3; dline < 0 ; dline++){
-            line = (this.agentPosition.line + dline + this.height) % this.height;
-            column = (this.agentPosition.column + dcol + this.width) % this.width;
-            state += this.board[column][line];
-        }
-    }
-    return state;
-};
-
-GameBoard.prototype.objectAt = function(column, line){
-    return this.board[column][line];
-};
-
-GameBoard.prototype.randomAction = function(){
-    //actions are -1,0,+1
-    return ~~(Math.random() * 3) - 1;
-};
-
-GameBoard.prototype.draw = function(){
-    var dx = this.canvasWidth/this.width;
-    var dy = this.canvasHeight/this.height;
-    var radius = Math.min(dx, dy)/2.5;
-    var pi2 = Math.PI * 2;
-    var context = this.canvasContext;
-    context.clearRect ( 0 , 0 , this.canvasWidth , this.canvasHeight);
-
-    for (var line = 0; line < this.height; line++){
-        for (var column = 0; column < this.width; column++){
-            if (this.board[column][line]===this.empty) continue;
-            context.beginPath();
-            context.arc(dx * (column + 0.5), dy * (line + 0.5), this.board[column][line]!==this.agent ? radius : radius*1.2, 0, pi2, false);
-            context.fillStyle = this.colorDictionary[this.board[column][line]];
-            context.fill();
-            context.lineWidth = 2;
-            context.strokeStyle = '#333333';
-            context.stroke();
-        }
-    }
-};
-
-var game = new GameBoard();
-
-var learner = new QLearner();
-
-var sid = setInterval(step, 500);
-
-function slow(){
-    clearInterval(sid);
-    sid = setInterval(step, 500);
+function positionLearner(){
+  var learner = new QLearner();
+  learner.add('3,3', '4,4', 1);
+  learner.add('4,4', '5,5', 1);
+  learner.add('5,5', '4,5', 1);
+  learner.add('4,5', '3,5', 1);
+  learner.add('3,5', '3,4', 1);
+  learner.add('3,4', '3,3', 1);
+  var updater = function (state) {
+    this.position.x = Number(state.split(',')[0]);
+    this.position.y = Number(state.split(',')[1]);
+  };
+  learner.stateUpdate = updater;
+  learner.learn(1000);
+  learner.setState('black');
+  return learner;
 }
 
-function fast(){
-    clearInterval(sid);
-    sid = setInterval(step, 20);
-}
-
-function step(){
-    //memorize current state
-
-    var currentState = game.currentState();
-    //get some action
-    var randomAction = game.randomAction();
-    //and the best action
-    var action = learner.bestAction(currentState);
-    //if there is no best action try to explore
-    if (action===null || action === undefined || (!learner.knowsAction(currentState, randomAction) && Math.random()<game.exploration)){
-        action = randomAction;
-    }
-    //action is a number -1,0,+1
-    action = Number(action);
-    //apply the action
-    game.setPosition(game.agentPosition.column + action);
-    //get next state, compute reward
-    game.moveObjectsDown();
-    var collidedWith = game.objectAt(game.agentPosition.column, game.agentPosition.line);
-    var reward = game.rewardDictionary[collidedWith];
-
-    var nextState = game.currentState();
-    learner.add(currentState, nextState, reward, action);
-
-    //make que q-learning algorithm number of iterations=10 or it could be another number
-    learner.learn(10);
-
-    game.addMoreObjects();
-
-    //some feedback on performance
-    game.score[collidedWith]++;
-    var summary = "<br />green==food: " + game.score[game.food];
-    summary += "<br />gray=poison: " + game.score[game.poison];
-    summary += "<br />poison/food: " + Math.round(100*game.score[game.poison]/game.score[game.food]) + "%";
-    document.getElementById(game.scoreId).innerHTML = summary;
-    game.draw();
+function dimensionLearner(){
+  var learner = new QLearner();
+  learner.add('30,3', '30,8', 1);
+  learner.add('30,8', '40,1', 1);
+  learner.add('40,1', '30,3', 1);
+  var updater = function (state) {
+    this.dimension.radius = Number(state.split(',')[0]);
+    this.dimension.lineWidth = Number(state.split(',')[1]);
+  };
+  learner.stateUpdate = updater;
+  learner.learn(1000);
+  learner.setState('black');
+  return learner;
 }
 
 
+function Agent() {
+  this.learner = {};
+  this.stateUpdate = {};
+  this.setPosition(5, 5);
+  this.setDimension(20, 4);
+  this.setColor('red', 'black');
+}
+
+Agent.prototype.addLearner = function (name, learner, stateUpdate) {
+  this.learner[name] = learner;
+  this.stateUpdate[name] = stateUpdate;
+};
+
+Agent.prototype.getLearner = function (name) {
+  return this.learner[name];
+};
+
+Agent.prototype.updateState = function (name) {
+  this.learner[name].step();
+  var state = this.learner[name].getState();
+  this.stateUpdate[name].call(this, state);
+};
+
+Agent.prototype.setPosition = function (x, y) {
+  this.position = {x: x, y: y};
+};
+
+Agent.prototype.setColor = function (fillStyle, strokeStyle) {
+  this.color = {fillStyle: fillStyle, strokeStyle: strokeStyle};
+};
+
+Agent.prototype.setDimension = function (radius, lineWidth) {
+  this.dimension = {radius: radius, lineWidth: lineWidth};
+};
+
+function Board() {
+  this.canvasId = "canvas";
+  this.canvasWidth = 300;
+  this.canvasHeight = 300;
+  this.width = 10; //cells
+  this.height = 10; //cells
+  this.init();
+}
+
+Board.prototype.init = function () {
+  var canvas = document.getElementById(this.canvasId);
+  this.canvasContext = canvas.getContext('2d');
+};
+
+
+Board.prototype.clear = function () {
+  var context = this.canvasContext;
+  context.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+};
+
+Board.prototype.draw = function (agent) {
+
+  var dx = this.canvasWidth / this.width;
+  var dy = this.canvasHeight / this.height;
+  var radius = agent.dimension.radius;
+  var pi2 = Math.PI * 2;
+  var context = this.canvasContext;
+  var column = agent.position.x;
+  var line = agent.position.y;
+
+  context.beginPath();
+  context.arc(dx * (column + 0.5), dy * (line + 0.5), radius, 0, pi2, false);
+  context.fillStyle = agent.color.fillStyle;
+  context.fill();
+  context.lineWidth = agent.dimension.lineWidth;
+  context.strokeStyle = agent.color.strokeStyle;
+  context.stroke();
+
+};
 
 
 
